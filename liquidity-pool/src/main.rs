@@ -1,64 +1,6 @@
-use std::{fmt::{Display, Formatter}, ops::{AddAssign, SubAssign}};
+mod decimal;
+use decimal::Decimal;
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct Decimal{
-    number : u64,
-    scale : u64,
-}
-
-impl std::ops::Add for Decimal{
-    type Output = Self;
-
-    fn add(self, other : Self) -> Self{
-        Self{number: self.number + other.number, scale: self.scale}
-    }
-}
-
-impl std::ops::Sub for Decimal{
-    type Output =  Self;
-
-    fn sub(self, other: Self) -> Self {
-        Self { number: self.number + other.number, scale: self.scale }
-    }
-}
-impl std::ops::Mul for Decimal{
-    type Output = Self;
-
-    fn mul(self, other: Self) -> Self {
-        Self{number: self.number * other.number / self.scale, scale: self.scale}
-    }
-}
-
-impl std::ops::Div for Decimal{
-    type Output = Self;
-
-    fn div(self, other: Self) -> Self {
-        Self{number: (self.number * self.scale)/other.number, scale: self.scale}
-    }
-}
-
-impl AddAssign for Decimal{
-
-    fn add_assign(&mut self, other: Self) {
-        *self = self.clone() + other;
-    }
-}
-
-impl SubAssign for Decimal{
-
-    fn sub_assign(&mut self, other: Self) {
-        *self = self.clone() - other;
- 
-    }
-}
-
-impl Display for Decimal{
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let res = self.number / self.scale;
-        write!(f, "{}", res)?;
-        Ok(())
-    }
-}
 struct LpPool {
     price : Decimal,
     token_amount : Decimal,
@@ -78,26 +20,27 @@ impl LpPool {
         if max_fee > 100.0 {
             return Err("ERROR".to_string())
         }
-        
+        let scale = 10u64.pow(scale as u32);
         let price = Decimal{number: (price*scale as f64) as u64, scale: scale};
-        let min_fee = Decimal{number: (min_fee*scale as f64) as u64, scale: scale};
-        let max_fee = Decimal{number: (max_fee*scale as f64) as u64, scale: scale};
+        let min_fee = Decimal{number: (0.01 * min_fee*scale as f64) as u64, scale: scale};
+        let max_fee = Decimal{number: (0.01 * max_fee*scale as f64) as u64, scale: scale};
         let liquidity_target = Decimal{number: (liquidity_target * scale as f64) as u64, scale: scale};
 
         Ok(LpPool{price : price, min_fee : min_fee, token_amount : Decimal{number: 0, scale: scale}, staked_token_amount : Decimal{number: 0, scale: scale} , 
-            lp_token_amount : Decimal{number: 0, scale: scale}, liquidity_target : liquidity_target, max_fee : max_fee, scale: 10u64.pow(scale as u32)})
+            lp_token_amount : Decimal{number: 0, scale: scale}, liquidity_target : liquidity_target, max_fee : max_fee, scale: scale})
     }
 
     pub fn add_liquidity(&mut self, token_amount: f64) -> Result<Decimal, String>{
         let token_amount = Decimal{number: (token_amount * self.scale as f64) as u64, scale: self.scale};
-        let potential_denominator  = self.token_amount + (self.price * self.lp_token_amount);
+        let potential_denominator  = self.token_amount + (self.price * self.staked_token_amount);
+        println!("token: {}, lp.token {}",self.token_amount, self.staked_token_amount);
         if potential_denominator == (Decimal{number: 0, scale: self.scale}) { //only occurs when pool is empty
             self.token_amount += token_amount;
             self.lp_token_amount = token_amount;
-            println!("gained {} lp tokens", self.lp_token_amount.number);
+            println!("gained {} lp tokens", self.lp_token_amount);
             return Ok(Decimal{number: token_amount.number,scale: self.scale})
         }
-        let lp_new_tokens =  token_amount / potential_denominator ;
+        let lp_new_tokens =  token_amount* 100 as u64 / potential_denominator ;
         self.lp_token_amount += lp_new_tokens;
         self.token_amount += token_amount;
         println!("gained {} lp tokens", lp_new_tokens);
@@ -124,11 +67,16 @@ impl LpPool {
         if token_amount  > self.token_amount {
             return Err("Transaction not possible!".to_string())
         }
-        self.token_amount -= token_amount;
         self.staked_token_amount += staked_token_amount;
-        let fee = if self.token_amount < self.liquidity_target {self.max_fee - (self.max_fee - self.min_fee)*(self.token_amount/self.liquidity_target)} 
-                else{self.min_fee};
-        let res = token_amount - fee;        
+        self.token_amount -= token_amount;
+        println!("maxfee {}, min fee {}, token am {}, target {}", self.max_fee,self.min_fee, self.token_amount, self.liquidity_target);
+        let fee = if self.token_amount  < self.liquidity_target 
+                {self.max_fee - (self.max_fee - self.min_fee)*(self.token_amount/self.liquidity_target)} 
+            else
+                {self.min_fee};
+        println!("fee: {} ",fee*token_amount);
+        let res = token_amount  - (fee*token_amount);
+        self.token_amount += fee*token_amount;        
         println!("swapped for {} token amount", res);
         Ok(res)
     }
@@ -136,10 +84,9 @@ impl LpPool {
 fn main() {
     println!("Hello, world!");
     let mut lp_pool = LpPool::init(1.5, 0.1, 9.0, 90.0, 5).unwrap();
-    lp_pool.add_liquidity(100.0).unwrap();
-    println!("tokens: {}",lp_pool.token_amount);
-    println!("lp tokens: {}",lp_pool.lp_token_amount);
+    lp_pool.add_liquidity(120.0).unwrap();
     lp_pool.swap(6.0).unwrap();
-
-
+    lp_pool.add_liquidity(10.0);
+    lp_pool.swap(30.0);
+    lp_pool.remove_liquidity(10.0);
 }
