@@ -1,5 +1,5 @@
 mod decimal;
-use decimal::Decimal;
+use decimal::{Decimal, DecimalInit};
 
 struct LpPool {
     price : Decimal,
@@ -9,7 +9,6 @@ struct LpPool {
     liquidity_target : Decimal,
     min_fee : Decimal,
     max_fee : Decimal,
-    scale: u64,
 }
 
 impl LpPool {
@@ -20,25 +19,25 @@ impl LpPool {
         if max_fee > 100.0 {
             return Err("ERROR".to_string())
         }
-        let scale = 10u64.pow(scale as u32);
-        let price = Decimal{number: (price*scale as f64) as u64, scale: scale};
-        let min_fee = Decimal{number: (0.01 * min_fee*scale as f64) as u64, scale: scale};
-        let max_fee = Decimal{number: (0.01 * max_fee*scale as f64) as u64, scale: scale};
-        let liquidity_target = Decimal{number: (liquidity_target * scale as f64) as u64, scale: scale};
+        Decimal::initialize_scale(scale);
 
-        Ok(LpPool{price : price, min_fee : min_fee, token_amount : Decimal{number: 0, scale: scale}, staked_token_amount : Decimal{number: 0, scale: scale} , 
-            lp_token_amount : Decimal{number: 0, scale: scale}, liquidity_target : liquidity_target, max_fee : max_fee, scale: scale})
+        let price = Decimal::init(price);
+        let min_fee = Decimal::init(0.01 * min_fee);
+        let max_fee = Decimal::init(0.01 * max_fee);
+        let liquidity_target = Decimal::init(liquidity_target);
+        Ok(LpPool{price : price, min_fee : min_fee, token_amount : Decimal::init(0), staked_token_amount : Decimal::init(0), 
+            lp_token_amount : Decimal::init(0), liquidity_target : liquidity_target, max_fee : max_fee})
     }
 
     pub fn add_liquidity(&mut self, token_amount: f64) -> Result<Decimal, String>{
-        let token_amount = Decimal{number: (token_amount * self.scale as f64) as u64, scale: self.scale};
+        let token_amount = Decimal::init(token_amount);
         let potential_denominator  = self.token_amount + (self.price * self.staked_token_amount);
         println!("token: {}, lp.token {}",self.token_amount, self.staked_token_amount);
-        if potential_denominator == (Decimal{number: 0, scale: self.scale}) { //only occurs when pool is empty
+        if potential_denominator == (Decimal::init(0)) { //only occurs when pool is empty
             self.token_amount += token_amount;
             self.lp_token_amount = token_amount;
             println!("gained {} lp tokens", self.lp_token_amount);
-            return Ok(Decimal{number: token_amount.number,scale: self.scale})
+            return Ok(Decimal::init(token_amount.number))
         }
         let lp_new_tokens =  token_amount* 100 as u64 / potential_denominator ;
         self.lp_token_amount += lp_new_tokens;
@@ -49,7 +48,7 @@ impl LpPool {
 
 
     pub fn remove_liquidity(&mut self, lp_token_amount : f64) -> Result<(Decimal, Decimal), String>{
-        let lp_token_amount = Decimal{number: (lp_token_amount* self.scale as f64) as u64, scale: self.scale};
+        let lp_token_amount = Decimal::init(lp_token_amount);
         if lp_token_amount > self.lp_token_amount{
             return Err("What is Happening?!".to_string())
         }
@@ -62,7 +61,7 @@ impl LpPool {
     }
 
     pub fn swap(&mut self, staked_token_amount: f64) -> Result<Decimal,String>{
-        let staked_token_amount = Decimal{number: (staked_token_amount* self.scale as f64) as u64, scale: self.scale};
+        let staked_token_amount = Decimal::init(staked_token_amount);
         let token_amount = staked_token_amount * self.price;
         if token_amount  > self.token_amount {
             return Err("Transaction not possible!".to_string())
@@ -83,8 +82,8 @@ impl LpPool {
 }
 fn main() {
     println!("Hello, world!");
-    let mut lp_pool = LpPool::init(1.5, 0.1, 9.0, 90.0, 5).unwrap();
-    lp_pool.add_liquidity(120.0).unwrap();
+    let mut lp_pool = LpPool::init(1.5, 0.1, 9.0, 90.0, 7).unwrap();
+    lp_pool.add_liquidity(100.0).unwrap();
     lp_pool.swap(6.0).unwrap();
     lp_pool.add_liquidity(10.0);
     lp_pool.swap(30.0);
