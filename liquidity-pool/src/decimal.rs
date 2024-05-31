@@ -7,7 +7,7 @@ pub trait DecimalInit<T> {
 }
 
 
-#[derive(Copy, Clone, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Eq, PartialOrd, Ord, Debug)]
 pub struct Decimal {
     pub number: u64,
 }
